@@ -1,0 +1,16 @@
+# Configurações do pipeline RAG baseado em Gemini File Search
+chunking:
+  max_tokens_per_chunk: 200
+  max_overlap_tokens: 20
+retrieval:
+  top_k: 5
+  metadata_filter: null  # Exemplo: "author=Robert Graves"
+model:
+  name: gemini-2.5-flash
+  temperature: 0.2
+  max_output_tokens: 1024
+store:
+  display_name: rag-store-principal
+  create_if_missing: true
+  polling_interval_seconds: 5
+  timeout_seconds: 180
