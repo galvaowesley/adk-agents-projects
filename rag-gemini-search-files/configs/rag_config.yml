@@ -1,10 +1,10 @@
-# Configurações do pipeline RAG baseado em Gemini File Search
+# Configuration for RAG with Gemini model
 chunking:
-  max_tokens_per_chunk: 200
-  max_overlap_tokens: 20
+  max_tokens_per_chunk: 400
+  max_overlap_tokens: 40
 retrieval:
   top_k: 5
-  metadata_filter: null  # Exemplo: "author=Robert Graves"
+  metadata_filter: null  
 model:
   name: gemini-2.5-flash
   temperature: 0.2
@@ -14,3 +14,10 @@ store:
   create_if_missing: true
   polling_interval_seconds: 5
   timeout_seconds: 180
+formatting:
+  append_sources_inline: true
+  sources_label: "Fontes:"  # Maintain consistency with system prompt
+  style: "parentheses"      # parentheses | brackets
+  joiner: "; "
+  show_page: true
+  page_prefix: "Art"        # Example: use "Art" or "p." depending on the document
