@@ -1,0 +1,37 @@
+# Root .gitignore for adk-agents-projects
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python bytecode/cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Environments / secrets
+.venv/
+venv/
+.env
+**/.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build/output
+build/
+dist/
+*.egg-info/
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
