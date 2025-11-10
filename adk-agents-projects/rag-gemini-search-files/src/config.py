@@ -78,6 +78,27 @@ class StoreConfig:
 
 
 @dataclass
+class FormattingConfig:
+    """Answer formatting parameters.
+
+    Args:
+        append_sources_inline: Whether to append sources at the end of the answer text.
+        sources_label: Label prefix for sources section (e.g., "Sources:" or "Fontes:").
+        style: Formatting style for inline sources. Options: "parentheses", "brackets".
+        joiner: Separator to use between items.
+        show_page: Whether to include page information when available.
+        page_prefix: Prefix used before the page number (e.g., "p.", "Art").
+    """
+
+    append_sources_inline: bool = True
+    sources_label: str = "Sources:"
+    style: str = "parentheses"  # or "brackets"
+    joiner: str = "; "
+    show_page: bool = True
+    page_prefix: str = "p."
+
+
+@dataclass
 class RagConfig:
     """Aggregate configuration combining all sub-config sections.
 
@@ -92,6 +113,7 @@ class RagConfig:
     retrieval: RetrievalConfig
     model: ModelConfig
     store: StoreConfig
+    formatting: FormattingConfig
 
 
 @dataclass
@@ -132,7 +154,14 @@ def load_rag_config() -> RagConfig:
     retrieval = RetrievalConfig(**cfg.get("retrieval", {}))
     model = ModelConfig(**cfg.get("model", {}))
     store = StoreConfig(**cfg.get("store", {}))
-    return RagConfig(chunking=chunking, retrieval=retrieval, model=model, store=store)
+    formatting = FormattingConfig(**cfg.get("formatting", {}))
+    return RagConfig(
+        chunking=chunking,
+        retrieval=retrieval,
+        model=model,
+        store=store,
+        formatting=formatting,
+    )
 
 
 def load_prompt_config() -> PromptConfig:

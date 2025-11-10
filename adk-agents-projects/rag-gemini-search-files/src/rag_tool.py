@@ -7,7 +7,8 @@ the proper File Search Tool configuration.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, List, Dict
+from dataclasses import asdict, is_dataclass
 import os
 
 from google import genai
@@ -46,6 +47,40 @@ def _file_search_tool(config: RagConfig, client: genai.Client) -> types.Tool:
     """
     store = ensure_store(client, config.store.display_name)
     return types.Tool(file_search=types.FileSearch(file_search_store_names=[store.name]))
+
+
+def format_citations_inline(sources: list[dict[str, Any]], cfg: "RagConfig") -> str:
+    """Return an inline sources string according to formatting config.
+
+    Styles:
+      - parentheses: "Fontes: (Doc1, Art 3; Doc2)"
+      - brackets:    "Sources: [1:Doc1] [2:Doc2]"
+    """
+    if not sources:
+        return ""
+
+    label = (getattr(cfg.formatting, "sources_label", None) or "Sources:").strip()
+    style = getattr(cfg.formatting, "style", "parentheses")
+    joiner = getattr(cfg.formatting, "joiner", "; ")
+    show_page = bool(getattr(cfg.formatting, "show_page", True))
+    page_prefix = getattr(cfg.formatting, "page_prefix", "p.").strip()
+
+    if style == "brackets":
+        items = []
+        for i, s in enumerate(sources, 1):
+            name = s.get("file_name") or s.get("file_resource") or "source"
+            items.append(f"[{i}:{str(name).replace(' ', '_')}]")
+        return f"{label} {' '.join(items)}".strip()
+
+    # Default: parentheses list with optional page
+    items = []
+    for s in sources:
+        name = s.get("file_name") or s.get("file_resource") or "source"
+        part = str(name)
+        if show_page and (s.get("page") is not None):
+            part = f"{part}, {page_prefix} {s['page']}"
+        items.append(part)
+    return f"{label} (" + joiner.join(items) + ")"
 
 
 def rag_query(question: str, top_k: int | None = None, metadata_filter: str | None = None) -> dict[str, Any]:
@@ -96,12 +131,66 @@ def rag_query(question: str, top_k: int | None = None, metadata_filter: str | No
     )
 
     text = getattr(resp, "text", None)
-    citations = None
+
+    # Extract human-friendly citations: file display name and optional chunk/page info.
+    sources: List[Dict[str, Any]] = []
+    raw_grounding: Dict[str, Any] | None = None
     try:
         cand0 = resp.candidates[0]
-        grounding = getattr(cand0, "grounding_metadata", None)
-        citations = grounding
+        grounding = getattr(cand0, "grounding_metadata", None) or {}
+        # Best-effort serialization for debug
+        try:
+            if is_dataclass(grounding):
+                raw_grounding = asdict(grounding)
+            else:
+                raw_grounding = grounding.__dict__ if hasattr(grounding, "__dict__") else dict(grounding)
+        except Exception:
+            raw_grounding = None
+        # Newer SDKs may expose 'citations' directly under grounding metadata
+        for c in getattr(grounding, "citations", []) or []:
+            src = getattr(c, "source", None)
+            if src and getattr(src, "file", None):
+                f = src.file
+                sources.append({
+                    "type": "file",
+                    "file_name": getattr(f, "display_name", None) or getattr(f, "name", None),
+                    "file_resource": getattr(f, "name", None),
+                    "page": getattr(src, "page", None),
+                    "chunk": getattr(src, "chunk", None),
+                })
+        # Fallbacks: sometimes only 'supporting_references' or 'grounding_chunks' exist
+        if not sources:
+            refs = getattr(grounding, "supporting_references", []) or []
+            for r in refs:
+                f = getattr(r, "file", None)
+                if f:
+                    sources.append({
+                        "type": "file",
+                        "file_name": getattr(f, "display_name", None) or getattr(f, "name", None),
+                        "file_resource": getattr(f, "name", None),
+                        "page": getattr(r, "page", None),
+                        "chunk": getattr(r, "chunk", None),
+                    })
+        # Last resort: inspect grounding chunks if exposed
+        if not sources:
+            chunks = getattr(grounding, "grounding_chunks", []) or []
+            for ch in chunks:
+                f = getattr(ch, "file", None)
+                if f:
+                    sources.append({
+                        "type": "file",
+                        "file_name": getattr(f, "display_name", None) or getattr(f, "name", None),
+                        "file_resource": getattr(f, "name", None),
+                        "page": getattr(ch, "page", None),
+                        "chunk": getattr(ch, "chunk", None),
+                    })
     except Exception:
-        citations = None
+        pass
 
-    return {"status": "success", "model": model_name, "answer": text, "citations": citations}
+    return {
+        "status": "success",
+        "model": model_name,
+        "answer": text,
+        "citations": sources if sources else None,
+        "raw_grounding": raw_grounding,
+    }

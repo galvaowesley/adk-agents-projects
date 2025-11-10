@@ -39,7 +39,13 @@ def file_search_tool(query: str) -> dict:
         dict: A dictionary with keys "status", "model", "answer" and optional
             "citations" (grounding metadata) when available.
     """
-    return rag_tool.rag_query(query)
+    result = rag_tool.rag_query(query)
+    cites = result.get("citations") or []
+    if cites and getattr(rag_cfg, "formatting", None) and rag_cfg.formatting.append_sources_inline:
+        inline = rag_tool.format_citations_inline(cites, rag_cfg)
+        # Single trailing newline keeps formatting consistent for ADK UI.
+        result["answer"] = f"{result.get('answer','')}\n{inline}".rstrip()
+    return result
 
 
 root_agent = Agent(
@@ -59,7 +65,43 @@ def main() -> None:
     """
     question = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Summarize the key topics from the documents."
     result = file_search_tool(question)
-    print(result.get("answer", ""))
+    answer = result.get("answer", "") or ""
+    print(answer)
+    # Print citations if available
+    cites = result.get("citations") or []
+    if cites:
+        print("\nSources:")
+        for i, c in enumerate(cites, 1):
+            label = c.get("file_name") or c.get("file_resource") or "unknown"
+            details = []
+            if c.get("page") is not None:
+                details.append(f"page {c['page']}")
+            if c.get("chunk") is not None:
+                details.append(f"chunk {c['chunk']}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            print(f"  [{i}] {label}{suffix}")
+    else:
+        # Fallback: attempt to derive file names from raw grounding if present
+        raw_grounding = result.get("raw_grounding") or {}
+        files = []
+        try:
+            # Common keys that might hold file references
+            for key in ["citations", "supporting_references", "grounding_chunks"]:
+                for entry in raw_grounding.get(key, []) or []:
+                    f = getattr(entry, "file", None) if hasattr(entry, "file") else entry.get("file") if isinstance(entry, dict) else None
+                    if f:
+                        fname = getattr(f, "display_name", None) or getattr(f, "name", None) or (
+                            f.get("display_name") if isinstance(f, dict) else None
+                        ) or (f.get("name") if isinstance(f, dict) else None)
+                        if fname:
+                            files.append(fname)
+            unique_files = list(dict.fromkeys(files))
+            if unique_files:
+                print("\nSources (fallback):")
+                for i, name in enumerate(unique_files, 1):
+                    print(f"  [{i}] {name}")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
